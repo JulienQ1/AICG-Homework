@@ -25,25 +25,12 @@ const vertexShaderSource = `
 `;
 
 const fragmentShaderSource = `
-    precision mediump float;
-    uniform vec2 u_resolution;
-    uniform float u_time;
-    uniform vec3 u_stars[50];
+   precision mediump float;
+   uniform vec2 u_resolution;
 
-    void main() {
-        vec2 uv = gl_FragCoord.xy / u_resolution;
-        vec3 color = vec3(0.0);
-        
-        // Simulate star brightness with simple ray marching
-        for (int i = 0; i < 50; i++) {
-            vec2 starPos = u_stars[i].xy;
-            float brightness = u_stars[i].z;
-            float dist = length(uv - starPos / u_resolution);
-            color += vec3(1.0, 1.0, 1.0) * brightness / (dist * dist);
-        }
-
-        gl_FragColor = vec4(color, 1.0);
-    }
+   void main() {
+    vec2 uv = gl_FragCoord.xy / u_resolution;
+   }
 `;
 
 // Utility functions for compiling shaders and creating WebGL program
