@@ -1,113 +1,103 @@
-// Basic setup
-const canvas = document.getElementById('canvas');
-const gl = canvas.getContext('webgl');
-canvas.width = window.innerWidth;
-canvas.height = window.innerHeight;
+async function main() {
+  const canvas = document.getElementById("canvas");
+  const gl = canvas.getContext("webgl2");
+  if (!gl) {
+      alert("WebGL 2 is not available.");
+      return;
+  }
 
-let stars = []; // Array to store star positions and brightness
-let constellations = []; // Array to store constellation lines
+  // Load shaders
+  const vertShaderSource = await fetch('shader.star').then(res => res.text());
+  const fragShaderSource = await fetch('shader.frag').then(res => res.text());
 
-// Initialize stars with random positions and brightness
-for (let i = 0; i < 50; i++) {
-    stars.push({
-        x: Math.random() * canvas.width,
-        y: Math.random() * canvas.height,
-        brightness: Math.random()
-    });
+  // Compile shaders
+  const vertShader = createShader(gl, gl.VERTEX_SHADER, vertShaderSource);
+  const fragShader = createShader(gl, gl.FRAGMENT_SHADER, fragShaderSource);
+
+  // Link program
+  const program = createProgram(gl, vertShader, fragShader);
+  gl.useProgram(program);
+
+  // Define star vertices and UVs
+  const vertices = new Float32Array([
+      // Positions        // UVs
+      0.0,  0.5, 0.0,     0.5, 1.0,
+     -0.5, -0.5, 0.0,     0.0, 0.0,
+      0.5, -0.5, 0.0,     1.0, 0.0,
+  ]);
+
+  // Create buffer
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+
+  const vbo = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+  // Get attribute locations
+  const a_position = gl.getAttribLocation(program, "a_position");
+  const a_uv = gl.getAttribLocation(program, "a_uv");
+
+  // Enable attributes
+  gl.enableVertexAttribArray(a_position);
+  gl.vertexAttribPointer(a_position, 3, gl.FLOAT, false, 5 * 4, 0);
+  gl.enableVertexAttribArray(a_uv);
+  gl.vertexAttribPointer(a_uv, 2, gl.FLOAT, false, 5 * 4, 3 * 4);
+
+  // Get uniform locations
+  const u_projection = gl.getUniformLocation(program, "u_projection");
+  const u_view = gl.getUniformLocation(program, "u_view");
+  const u_model = gl.getUniformLocation(program, "u_model");
+  const u_time = gl.getUniformLocation(program, "u_time");
+  const u_resolution = gl.getUniformLocation(program, "u_resolution");
+
+  // Set up matrices
+  const projectionMatrix = mat4.create();
+  mat4.perspective(projectionMatrix, Math.PI / 4, canvas.width / canvas.height, 0.1, 100.0);
+  const viewMatrix = mat4.create();
+  mat4.lookAt(viewMatrix, [0, 0, 3], [0, 0, 0], [0, 1, 0]);
+  const modelMatrix = mat4.create();
+
+  // Set uniform values
+  gl.uniformMatrix4fv(u_projection, false, projectionMatrix);
+  gl.uniformMatrix4fv(u_view, false, viewMatrix);
+  gl.uniformMatrix4fv(u_model, false, modelMatrix);
+  gl.uniform2f(u_resolution, canvas.width, canvas.height);
+
+  // Animation loop
+  function render(time) {
+      gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+      gl.uniform1f(u_time, time * 0.001);
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      requestAnimationFrame(render);
+  }
+  requestAnimationFrame(render);
 }
 
-// WebGL shader setup for ray marching
-const vertexShaderSource = `
-    attribute vec4 a_position;
-    void main() {
-        gl_Position = a_position;
-    }
-`;
-
-const fragmentShaderSource = `
-   precision mediump float;
-   uniform vec2 u_resolution;
-
-   void main() {
-    vec2 uv = gl_FragCoord.xy / u_resolution;
-   }
-`;
-
-// Utility functions for compiling shaders and creating WebGL program
+// Utility functions
 function createShader(gl, type, source) {
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    return shader;
+  const shader = gl.createShader(type);
+  gl.shaderSource(shader, source);
+  gl.compileShader(shader);
+  if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+      console.error(gl.getShaderInfoLog(shader));
+      gl.deleteShader(shader);
+      return null;
+  }
+  return shader;
 }
 
-function createProgram(gl, vertexShader, fragmentShader) {
-    const program = gl.createProgram();
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-    return program;
+function createProgram(gl, vertShader, fragShader) {
+  const program = gl.createProgram();
+  gl.attachShader(program, vertShader);
+  gl.attachShader(program, fragShader);
+  gl.linkProgram(program);
+  if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.error(gl.getProgramInfoLog(program));
+      gl.deleteProgram(program);
+      return null;
+  }
+  return program;
 }
 
-// Compile shaders and create program
-const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertexShaderSource);
-const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragmentShaderSource);
-const program = createProgram(gl, vertexShader, fragmentShader);
-
-// Send star data to fragment shader
-const starLocations = stars.flatMap(star => [star.x, star.y, star.brightness]);
-const uStarsLocation = gl.getUniformLocation(program, 'u_stars');
-gl.uniform3fv(uStarsLocation, new Float32Array(starLocations));
-
-// Mouse click event for linking stars
-canvas.addEventListener('click', (e) => {
-    const x = e.clientX;
-    const y = e.clientY;
-    const nearestStar = findNearestStar(x, y);
-    if (nearestStar) {
-        constellations.push(nearestStar);
-    }
-    if (constellations.length > 1) {
-        drawConstellation();
-    }
-});
-
-// Function to find the nearest star
-function findNearestStar(x, y) {
-    let minDist = Infinity;
-    let nearest = null;
-    stars.forEach(star => {
-        const dist = Math.hypot(star.x - x, star.y - y);
-        if (dist < minDist) {
-            minDist = dist;
-            nearest = star;
-        }
-    });
-    return nearest;
-}
-
-// Draw constellation lines
-function drawConstellation() {
-    const ctx = canvas.getContext('2d');
-    ctx.strokeStyle = 'white';
-    ctx.beginPath();
-    constellations.forEach((star, index) => {
-        if (index === 0) {
-            ctx.moveTo(star.x, star.y);
-        } else {
-            ctx.lineTo(star.x, star.y);
-        }
-    });
-    ctx.stroke();
-}
-
-// Main render loop
-function render() {
-    gl.clear(gl.COLOR_BUFFER_BIT);
-    gl.useProgram(program);
-    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
-    requestAnimationFrame(render);
-}
-
-// Start rendering
-render();
+main();
