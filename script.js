@@ -1,116 +1,220 @@
-// Set up WebGL context
-const canvas = document.getElementById("canvas");
-const gl = canvas.getContext("webgl2");
-
-if (!gl) {
-    alert("WebGL 2 is required for this application.");
+async function readShader(id) {
+  const req = await fetch(document.getElementById(id).src);
+  return await req.text();
 }
 
-// Vertex Shader Source Code
-const vertShaderSource = `#version 300 es
-in vec3 a_position;
-uniform mat4 u_projection;
-uniform mat4 u_view;
-void main() {
-    gl_Position = u_projection * u_view * vec4(a_position, 1.0);
-    gl_PointSize = 5.0;
-}`;
+function createShader(gl, type, src) {
+  let shader = gl.createShader(type);
+  gl.shaderSource(shader, src);
+  gl.compileShader(shader);
 
-// Fragment Shader Source Code
-const fragShaderSource = `#version 300 es
-precision mediump float;
-out vec4 fragColor;
-void main() {
-    fragColor = vec4(1.0, 1.0, 1.0, 1.0); // White color for stars
-}`;
+  let success = gl.getShaderParameter(shader, gl.COMPILE_STATUS);
+  if (success) return shader;
 
-// Compile shaders
-function createShader(gl, type, source) {
-    const shader = gl.createShader(type);
-    gl.shaderSource(shader, source);
-    gl.compileShader(shader);
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        console.error(gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
+  console.error("Could not compile WebGL Shader", gl.getShaderInfoLog(shader));
+  gl.deleteShader(shader);
+}
+
+function createProgram(gl, vertShader, fragShader) {
+  let program = gl.createProgram();
+  gl.attachShader(program, vertShader);
+  gl.attachShader(program, fragShader);
+  gl.linkProgram(program);
+
+  let success = gl.getProgramParameter(program, gl.LINK_STATUS);
+  if (success) return program;
+
+  console.error("Could not Link WebGL Program", gl.getProgramInfoLog(program));
+  gl.deleteProgram(program);
+}
+
+async function main() {
+  const fps = document.getElementById("fps");
+
+  const time = {
+      current_t: Date.now(),
+      dts: [1 / 60],
+      t: 0,
+
+      dt: () => time.dts[0],
+      update: () => {
+          const new_t = Date.now();
+          time.dts = [(new_t - time.current_t) / 1_000, ...time.dts].slice(0, 10);
+          time.t += time.dt();
+          time.current_t = new_t;
+
+          const dt = time.dts.reduce((a, dt) => a + dt, 0) / time.dts.length;
+          fps.innerHTML = `${Math.round(1 / dt, 2)}`;
+      },
+  };
+
+  // MODIFICATION : Ajout de deux contextes pour les canvas 2D et WebGL
+  const canvas2d = document.getElementById("canvas2d");
+  const ctx = canvas2d.getContext("2d");
+
+  const canvas3d = document.getElementById("canvas3d");
+  const gl = canvas3d.getContext("webgl2");
+  if (!gl) alert("Could not initialize WebGL Context.");
+  if (!ctx) console.error("Could not initialize 2D context for line drawing.");
+
+  const vertShader = createShader(gl, gl.VERTEX_SHADER, await readShader("vert"));
+  const fragShader = createShader(gl, gl.FRAGMENT_SHADER, await readShader("frag"));
+  const program = createProgram(gl, vertShader, fragShader);
+
+  const a_position = gl.getAttribLocation(program, "a_position");
+  const a_uv = gl.getAttribLocation(program, "a_uv");
+
+  const u_resolution = gl.getUniformLocation(program, "u_resolution");
+  const u_glowingStars = gl.getUniformLocation(program, "u_glowingStars");
+
+  // Star data
+  const starCount = 10;
+  const starPositions = new Float32Array(starCount * 2);
+  const starSizes = new Float32Array(starCount);
+  const glowingStars = new Array(starCount).fill(0); // 0 = not glowing, 1 = glowing
+
+  function generateStarPositions() {
+      for (let i = 0; i < starCount; i++) {
+          starPositions[i * 2] = Math.random() * canvas3d.width;    // x position
+          starPositions[i * 2 + 1] = Math.random() * canvas3d.height; // y position
+          starSizes[i] = 0.02 + Math.random() * 0.03; // Slightly smaller size
+      }
+  }
+
+  generateStarPositions();
+  glowingStars[0] = 1;
+
+  const u_starPositions = gl.getUniformLocation(program, "u_starPositions");
+  const u_starSizes = gl.getUniformLocation(program, "u_starSizes");
+
+  const data = new Float32Array([
+      -1.0, -1.0,   0.0, 0.0,
+       1.0, -1.0,   1.0, 0.0,
+       1.0,  1.0,   1.0, 1.0,
+      -1.0,  1.0,   0.0, 1.0,
+  ]);
+
+  const indices = new Uint16Array([
+      0, 1, 2,
+      0, 2, 3,
+  ]);
+
+  const vao = gl.createVertexArray();
+  gl.bindVertexArray(vao);
+
+  const vbo = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vbo);
+  gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(a_position);
+  gl.vertexAttribPointer(a_position, 2, gl.FLOAT, false, 4 * 4, 0);
+  gl.enableVertexAttribArray(a_uv);
+  gl.vertexAttribPointer(a_uv, 2, gl.FLOAT, false, 4 * 4, 2 * 4);
+
+  const ebo = gl.createBuffer();
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ebo);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+  gl.bindVertexArray(null);
+
+  // MODIFICATION : Mise à jour de la taille des deux canvas
+  function resizeCanvasToDisplaySize() {
+      const displayWidth = canvas3d.clientWidth;
+      const displayHeight = canvas3d.clientHeight;
+
+      if (canvas3d.width !== displayWidth || canvas3d.height !== displayHeight) {
+          canvas3d.width = displayWidth;
+          canvas3d.height = displayHeight;
+          canvas2d.width = displayWidth; // Mise à jour de la taille du canvas 2D
+          canvas2d.height = displayHeight;
+          generateStarPositions();
+          gl.viewport(0, 0, canvas3d.width, canvas3d.height);
+      }
+  }
+
+  // MODIFICATION : Utilisation de ctx pour dessiner les lignes sur le canvas 2D
+  function drawLines() {
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas2d.width, canvas2d.height);
+
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+
+    let lastGlowingIndex = -1;
+
+    for (let i = 0; i < starCount; i++) {
+        if (glowingStars[i] === 1) {
+            if (lastGlowingIndex !== -1) {
+                const x1 = starPositions[lastGlowingIndex * 2];
+                const y1 = starPositions[lastGlowingIndex * 2 + 1];
+                const x2 = starPositions[i * 2];
+                const y2 = starPositions[i * 2 + 1];
+
+                console.log(`Drawing line from (${x1}, ${y1}) to (${x2}, ${y2})`);
+
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+            lastGlowingIndex = i;
+        }
     }
-    return shader;
 }
 
-// Link program
-function createProgram(gl, vertexShader, fragmentShader) {
-    const program = gl.createProgram();
-    gl.attachShader(program, vertexShader);
-    gl.attachShader(program, fragmentShader);
-    gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
-        console.error(gl.getProgramInfoLog(program));
-        gl.deleteProgram(program);
-        return null;
-    }
-    return program;
+
+  function loop() {
+      resizeCanvasToDisplaySize();
+      gl.clearColor(0.0, 0.0, 0.0, 1.0);
+      gl.clear(gl.COLOR_BUFFER_BIT);
+
+      gl.bindVertexArray(vao);
+      gl.useProgram(program);
+      gl.uniform2f(u_resolution, gl.canvas.width, gl.canvas.height);
+
+      gl.uniform2fv(u_starPositions, starPositions);
+      gl.uniform1fv(u_starSizes, starSizes);
+      gl.uniform1iv(u_glowingStars, glowingStars);
+
+      gl.drawElements(gl.TRIANGLES, indices.length, gl.UNSIGNED_SHORT, 0);
+      gl.bindVertexArray(null);
+
+      time.update();
+      drawLines();
+
+      requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+
+  canvas3d.addEventListener("click", () => {
+      console.log("Canvas clicked.");
+      let lastGlowingIndex = glowingStars.lastIndexOf(1); 
+      let nearestStarIndex = -1;
+      let minDistance = Infinity;
+
+      for (let i = 0; i < starCount; i++) {
+          if (glowingStars[i] === 1 || i === lastGlowingIndex) continue;
+
+          const starX = starPositions[i * 2];
+          const starY = starPositions[i * 2 + 1];
+          const glowX = starPositions[lastGlowingIndex * 2];
+          const glowY = starPositions[lastGlowingIndex * 2 + 1];
+          const dist = Math.sqrt((glowX - starX) ** 2 + (glowY - starY) ** 2);
+
+          if (dist < minDistance) {
+              minDistance = dist;
+              nearestStarIndex = i;
+          }
+      }
+
+      if (nearestStarIndex !== -1) {
+          console.log(`Glowing new star at index: ${nearestStarIndex}`);
+          glowingStars[nearestStarIndex] = 1;
+      } else {
+          console.log("No more stars to glow.");
+      }
+  });
 }
 
-// Define Primogem star shape points for a 3D cube
-const starPositions = [];
-for (let i = 0; i < 50; i++) {
-    const angle = Math.random() * 2 * Math.PI;
-    const distance = Math.random() * 0.5 + 0.5;
-    const x = Math.cos(angle) * distance;
-    const y = Math.sin(angle) * distance;
-    const z = (Math.random() - 0.5) * 2.0;
-    starPositions.push(x, y, z);
-}
-
-// Initialize shaders and program
-const vertexShader = createShader(gl, gl.VERTEX_SHADER, vertShaderSource);
-const fragmentShader = createShader(gl, gl.FRAGMENT_SHADER, fragShaderSource);
-const program = createProgram(gl, vertexShader, fragmentShader);
-gl.useProgram(program);
-
-// Set up position buffer
-const positionBuffer = gl.createBuffer();
-gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(starPositions), gl.STATIC_DRAW);
-
-const positionAttributeLocation = gl.getAttribLocation(program, "a_position");
-gl.enableVertexAttribArray(positionAttributeLocation);
-gl.vertexAttribPointer(positionAttributeLocation, 3, gl.FLOAT, false, 0, 0);
-
-// Set up uniforms for projection and view matrices
-const u_projection = gl.getUniformLocation(program, "u_projection");
-const u_view = gl.getUniformLocation(program, "u_view");
-
-function resizeCanvas() {
-    canvas.width = canvas.clientWidth;
-    canvas.height = canvas.clientHeight;
-    gl.viewport(0, 0, canvas.width, canvas.height);
-}
-
-// Set up perspective projection matrix
-const aspect = canvas.clientWidth / canvas.clientHeight;
-const fov = Math.PI / 4;
-const near = 0.1;
-const far = 10.0;
-const projectionMatrix = mat4.create();
-mat4.perspective(projectionMatrix, fov, aspect, near, far);
-
-// Animation loop
-function render(time) {
-    resizeCanvas();
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);
-    gl.clear(gl.COLOR_BUFFER_BIT);
-
-    // Rotate the view matrix over time
-    const viewMatrix = mat4.create();
-    mat4.lookAt(viewMatrix, [Math.sin(time * 0.001) * 2, 1.5, Math.cos(time * 0.001) * 2], [0, 0, 0], [0, 1, 0]);
-
-    gl.uniformMatrix4fv(u_projection, false, projectionMatrix);
-    gl.uniformMatrix4fv(u_view, false, viewMatrix);
-
-    gl.drawArrays(gl.POINTS, 0, starPositions.length / 3);
-
-    requestAnimationFrame(render);
-}
-
-requestAnimationFrame(render);
+main();
