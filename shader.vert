@@ -1,11 +1,11 @@
 #version 300 es
-precision mediump float;
 
 in vec2 a_position;
-uniform vec2 u_resolution;
+in vec2 a_uv;
+
+out vec2 f_uv;
 
 void main() {
-    vec2 zeroToOne = a_position / u_resolution;
-    vec2 clipSpace = zeroToOne * 2.0 - 1.0;
-    gl_Position = vec4(clipSpace * vec2(1, -1), 0, 1);
+    gl_Position = vec4(a_position, 0, 1);
+    f_uv = a_uv;
 }
