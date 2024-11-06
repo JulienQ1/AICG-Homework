@@ -1,30 +1,26 @@
 <!doctype html>
 <html>
-    <head>
-        <title>Ray Marching Homework</title>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        
-       
-    </head>
-    <body class="open-sans-normal">
-        <div>
-            <h1 class="open-sans-black">Julien Quenneville</h1>
-            <h2 class="open-sans-bold">Ray Marching</h2>
-            <h3 class="open-sans-bold">Star Link</h3>
-        </div>
-        <p style="text-align: center; font-size: 2rem" class="open-sans-bold">
-            <span id="fps">60</span> <span>FPS</span>
-        </p>
+<head>
+    <title>Ray Marching Homework</title>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+</head>
+<body class="open-sans-normal">
+    <div>
+        <h1 class="open-sans-black">Julien Quenneville</h1>
+        <h2 class="open-sans-bold">Ray Marching</h2>
+        <h3 class="open-sans-bold">Star Link</h3>
+    </div>
+    <p style="text-align: center; font-size: 2rem" class="open-sans-bold">
+        <span id="fps">60</span> <span>FPS</span>
+    </p>
 
-        <!-- MODIFICATION : Ajout de deux canvas pour séparer 2D et WebGL -->
-        <div style="position: relative; width: 100%; height: 600px;">
-            <canvas id="canvas2d" width="800" height="600" style="position: absolute; top: 0; left: 0;"></canvas>
-            <canvas id="canvas3d" width="800" height="600" style="position: absolute; top: 0; left: 0;"></canvas> 
-        </div>
-        
-        <script src="script.js" type="module"></script>
-        <script id="vert" src="shader.vert" type="x-shader/x-vertex"></script>
-        <script id="frag" src="shader.frag" type="x-shader/x-fragment"></script>
-    </body>
+    <!-- Two canvases for 2D and WebGL rendering -->
+    <div style="position: relative; width: 100%; height: 600px;">
+        <canvas id="canvas2d" width="800" height="600" style="position: absolute; top: 0; left: 0;"></canvas>
+        <canvas id="canvas3d" width="800" height="600" style="position: absolute; top: 0; left: 0;"></canvas> 
+    </div>
+    
+    <script src="script.js" type="module"></script>
+</body>
 </html>
