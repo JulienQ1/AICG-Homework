@@ -1,34 +1,48 @@
 #version 300 es
-precision mediump float;
+precision highp float;
 
 uniform vec2 u_resolution;
-out vec4 fragColor;
+uniform vec2 u_starPositions[10];   // Array for up to 10 stars
+uniform float u_starSizes[10];      // Array for star sizes
+uniform int u_glowingStars[10];     // Array to track which stars should glow
+
+out vec4 outColor;
 
 void main() {
-    // Normalize coordinates and scale to create a tiled effect
-    vec2 uv = gl_FragCoord.xy / u_resolution.xy;
-    uv *= vec2(4.0, 3.0); // Repeat pattern in both x and y directions
+    vec2 st = gl_FragCoord.xy / u_resolution;
+    vec3 color = vec3(0.0);
 
-    // Create a grid by using the fractional part of the UV coordinates
-    vec2 gridUV = fract(uv);
+    // Loop through each star
+    for (int i = 0; i < 10; i++) {
+        vec2 pos = u_starPositions[i] / u_resolution; // Convert to screen space
+        float size = u_starSizes[i];
 
-    // Center the coordinates within each cell
-    vec2 centeredUV = gridUV - 0.5;
+        // Calculate distance to the star position
+        float dist = length(st - pos);
 
-    // Calculate polar coordinates for the star shape
-    float angle = atan(centeredUV.y, centeredUV.x);
-    float radius = length(centeredUV);
-    float star = cos(5.0 * angle) * 0.5 + 0.5;
+        // Check if this star should glow
+        if (u_glowingStars[i] == 1) {
+            // Create a diamond-like shape with glow effect
+            vec2 d = abs(st - pos);
+            float diamondShape = max(d.x, d.y) / size;
 
-    // Mask to create the star in white
-    float mask = smoothstep(0.4, 0.5, star * radius);
+            // Adjust for sharpness and color gradient for a gem-like effect
+            float starCore = smoothstep(0.3, 0.4, diamondShape);    // Inner core
+            float starOutline = smoothstep(0.4, 0.6, diamondShape); // Outer outline
 
-    // Set colors: white for the star and black for the background
-    vec3 starColor = vec3(1.0);        // White star color
-    vec3 backgroundColor = vec3(0.0);  // Black background
+            vec3 coreColor = vec3(0.6, 0.8, 1.0);  // Light blue core
+            vec3 outlineColor = vec3(1.0, 0.7, 1.0); // Soft pink outline
 
-    // Mix colors to display the star
-    vec3 color = mix(backgroundColor, starColor, mask);
+            // Blend colors between the core and outline for the glowing star
+            color += mix(outlineColor, coreColor, starCore) * (1.0 - starOutline);
+        } else {
+            // Render non-glowing stars as small white points
+            if (dist < size * 0.3) {
+                color += vec3(1.0); // White color for non-glowing stars
+            }
+        }
+    }
 
-    fragColor = vec4(color, 1.0);
+    outColor = vec4(color, 1.0);
 }
+
